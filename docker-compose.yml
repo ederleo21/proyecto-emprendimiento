@@ -1,0 +1,68 @@
+# Stack del servicio Outreach (Vinculación con la Sociedad).
+#
+# Los puertos van corridos respecto de InnoTech (8100, 5180, 5434) para poder
+# tener los dos stacks levantados a la vez sin chocar.
+#
+# La base va en 5434 y no en 5433: ese ya lo ocupa el `db` de InnoTech
+# (`ms-project-ube-itb-db-1`), así que 5433 chocaba en vez de evitar el choque.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-outreach}
+    ports:
+      - "5434:5432"
+    volumes:
+      - outreach_db_data:/var/lib/postgresql/data
+    healthcheck:
+      # Sin esto el backend arranca antes de que Postgres acepte conexiones.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-outreach}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8100:8000"
+    volumes:
+      # Código montado: editar y reiniciar, sin reconstruir la imagen.
+      - ./backend:/app
+      - outreach_media:/app/media
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    ports:
+      - "5180:5173"
+    volumes:
+      - ./frontend:/app
+      # Volumen propio para node_modules: el bind-mount de arriba taparía los
+      # que instaló la imagen, y las binarias de Linux no sirven desde Windows.
+      - outreach_node_modules:/app/node_modules
+
+volumes:
+  outreach_db_data:
+  outreach_media:
+  outreach_node_modules:

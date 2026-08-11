@@ -1,0 +1,11 @@
+django>=4.2,<6
+djangorestframework
+django-cors-headers
+django-environ
+drf-spectacular
+django-tenants
+psycopg[binary]
+# El JWT se decodifica a mano: este servicio no emite tokens, solo verifica
+# los que firma IAM.
+pyjwt
+requests

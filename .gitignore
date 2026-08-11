@@ -1,0 +1,28 @@
+# Entorno
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Django
+/backend/media/
+/backend/staticfiles/
+*.sqlite3
+
+# Node
+node_modules/
+/frontend/.svelte-kit/
+/frontend/build/
+/frontend/.vite/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
