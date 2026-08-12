@@ -3,6 +3,7 @@ from django.urls import path
 from api.v1.entrepreneurship import views as v
 
 urlpatterns = [
+    path('configuration/', v.ConfigurationView.as_view(), name='ent-configuration'),
     path('stages/', v.StageListView.as_view(), name='ent-stage-list'),
     path('metrics/', v.StageMetricsView.as_view(), name='ent-metrics'),
     path('projects/', v.ProjectListCreateView.as_view(), name='ent-project-list'),

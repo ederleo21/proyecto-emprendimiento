@@ -38,7 +38,13 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set('Content-Type', 'application/json');
+
+  // Con un archivo NO se pone el `Content-Type`: el navegador tiene que
+  // ponerlo él para incluir el separador que delimita las partes. Si se fija
+  // a mano, el servidor recibe un cuerpo que no puede leer.
+  if (!(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   // Se lee en cada petición para no depender del orden de carga de los módulos
   // (el store de sesión importa este archivo).
@@ -87,4 +93,11 @@ export const api = {
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  /** Sube un archivo. Va aparte de `post` porque el cuerpo es `FormData` y no
+   *  JSON, y eso cambia cómo se arma la petición. */
+  upload: <T>(path: string, field: string, file: File) => {
+    const form = new FormData();
+    form.append(field, file);
+    return request<T>(path, { method: 'POST', body: form });
+  },
 };

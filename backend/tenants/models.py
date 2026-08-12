@@ -7,8 +7,22 @@ instituciones a mano, salvo para desarrollar sin IAM
 """
 import uuid
 
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
 from django_tenants.models import DomainMixin, TenantMixin
+
+# Un logotipo institucional no pesa megas. El tope evita que alguien suba la
+# foto de un evento por equivocación y la cabecera tarde en cargar.
+LOGO_MAX_BYTES = 2 * 1024 * 1024
+
+
+def validar_peso_logo(archivo):
+    if archivo.size > LOGO_MAX_BYTES:
+        raise ValidationError(
+            f'El logotipo no puede pesar más de {LOGO_MAX_BYTES // 1024 // 1024} MB. '
+            f'El archivo pesa {archivo.size // 1024} KB.'
+        )
 
 # Los mismos valores que trae el branding de InnoTech por defecto
 # (`ui-svelte/branding.ts`). No son la identidad de nadie: son el neutro para
@@ -19,7 +33,30 @@ COLOR_SECUNDARIO_POR_DEFECTO = '#150089'
 
 class Tenant(TenantMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # El IAM es la fuente de verdad del nombre cuando está conectado:
+    # `sync_tenants` lo sobreescribe. Mientras no lo esté, se edita desde la
+    # pantalla de identidad visual — si no, un nombre mal escrito al crear la
+    # institución quedaría congelado para siempre.
     name = models.CharField(max_length=255)
+    subtitle = models.CharField(
+        max_length=120,
+        default='Vinculación con la Sociedad',
+        blank=True,
+        help_text='La línea bajo el nombre en la cabecera.',
+    )
+    logo = models.FileField(
+        upload_to='branding/',
+        null=True,
+        blank=True,
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=['png', 'jpg', 'jpeg', 'svg', 'webp'],
+                message='El logotipo debe ser PNG, JPG, SVG o WEBP.',
+            ),
+            validar_peso_logo,
+        ],
+        help_text='Reemplaza la inicial en la cabecera.',
+    )
     primary_color = models.CharField(
         max_length=7,
         default=COLOR_POR_DEFECTO,

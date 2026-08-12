@@ -13,7 +13,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
-  import { Badge, Button, Icon, ProgressBar } from '$lib/ds';
+  import { Badge, Button, Icon, ProgressBar, Select } from '$lib/ds';
   import { projectState as ps, type ProjectStage } from '$lib/project.svelte';
 
   const id = $derived(page.params.id);
@@ -46,8 +46,22 @@
     <p class="error">{ps.errorMessage}</p>
   {:else if ps.project}
     <header class="head">
-      <h1 class="title">{ps.project.title}</h1>
+      <div class="head-main">
+        {#if ps.project.code}<span class="code">{ps.project.code}</span>{/if}
+        <h1 class="title">{ps.project.title}</h1>
+      </div>
       <div class="head-actions">
+        <!-- El cambio de etapa es manual: qué la hace avanzar sola todavía no
+             está definido, y aun cuando lo esté hará falta poder corregir. -->
+        <div class="stage-picker">
+          <Select
+            label="Etapa actual"
+            size="sm"
+            options={ps.stageChoices}
+            value={ps.project.stage ?? ''}
+            onchange={(v) => ps.setStage(v)}
+          />
+        </div>
         <Badge variant="neutral" size="lg">{ps.project.progress}% completado</Badge>
         <Button variant="outline" size="md" onclick={() => goto(base || '/')}>Regresar</Button>
       </div>
@@ -87,9 +101,15 @@
   .crumb.dark { color: var(--ds-neutral-700, #334155); font-weight: 700; }
   .sep { color: var(--ds-neutral-400, #cbd5e1); }
 
-  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .head-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .title { margin: 0; font-size: 22px; font-weight: 800; color: var(--ds-neutral-800, #1e293b); max-width: 60ch; }
-  .head-actions { display: flex; align-items: center; gap: 10px; }
+  .code {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+    color: var(--ds-neutral-500, #64748b);
+  }
+  .head-actions { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+  .stage-picker { min-width: 190px; }
 
   .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 

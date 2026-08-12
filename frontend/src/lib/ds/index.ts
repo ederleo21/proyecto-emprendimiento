@@ -22,15 +22,23 @@
 export { default as Badge } from './Badge.svelte';
 export { default as Button } from './Button.svelte';
 export { default as Icon } from './Icon.svelte';
-export { default as Modal } from './Modal.svelte';
-export { default as Select } from './Select.svelte';
-export { default as TextField } from './TextField.svelte';
 
 // Copiados de `@innotech/ui-svelte`
 export { default as Pagination } from './Pagination.svelte';
 export { default as ProgressBar } from './ProgressBar.svelte';
 export { default as StatCards } from './StatCards.svelte';
 export { default as ViewToggle } from './ViewToggle.svelte';
+
+export { default as Checkbox } from './Checkbox.svelte';
+export { default as ConfirmModal } from './ConfirmModal.svelte';
+export { default as Modal } from './Modal.svelte';
+export { default as StatusToggle } from './StatusToggle.svelte';
+export { default as Switch } from './Switch.svelte';
+export { default as RowActions, type RowAction } from './RowActions.svelte';
+export { default as Select } from './Select.svelte';
+export { default as TextArea } from './TextArea.svelte';
+export { default as TextField } from './TextField.svelte';
+export { default as Tooltip } from './Tooltip.svelte';
 
 // Tabla, también de allá. Se usan juntos:
 //   <Table><TableHead><TableRow><TableHeadCell>…

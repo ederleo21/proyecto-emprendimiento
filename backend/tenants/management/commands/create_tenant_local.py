@@ -33,17 +33,33 @@ class Command(BaseCommand):
         )
         # `auto_create_schema` crea el schema y corre las migraciones de tenant.
 
-        for host in (f'{schema_name}.localhost', 'localhost'):
-            # `localhost` se asigna al primer tenant que lo pida: es el atajo
-            # para que el navegador resuelva sin tocar el archivo hosts.
-            Domain.objects.get_or_create(
-                domain=host, tenant=tenant,
-                defaults={'is_primary': host.startswith(schema_name)},
-            )
+        # El propio: siempre.
+        propio = f'{schema_name}.localhost'
+        Domain.objects.get_or_create(
+            domain=propio, tenant=tenant, defaults={'is_primary': True},
+        )
 
+        # `localhost` a secas es el atajo para no tocar el archivo hosts de
+        # Windows, y solo puede apuntar a una institución. Se lo queda la
+        # primera que lo pida; las siguientes usan el suyo. Antes se intentaba
+        # asignar siempre y la segunda institución reventaba.
+        atajo = Domain.objects.filter(domain='localhost').first()
+        if atajo is None:
+            Domain.objects.create(domain='localhost', tenant=tenant, is_primary=False)
+            atajo_de = schema_name
+        else:
+            atajo_de = atajo.tenant.schema_name
+
+        hosts = propio if atajo_de != schema_name else f'{propio}, localhost'
         status = 'creada' if is_new else 'ya existía'
+
         self.stdout.write(self.style.SUCCESS(
             f'Institución "{tenant.name}" ({schema_name}) {status}.\n'
-            f'  Hosts: {schema_name}.localhost, localhost\n'
+            f'  Hosts: {hosts}\n'
             f'  Cabecera equivalente: X-Tenant-Schema: {schema_name}'
         ))
+        if atajo_de != schema_name:
+            self.stdout.write(self.style.WARNING(
+                f'  Ojo: "localhost" a secas resuelve a "{atajo_de}". '
+                f'Para entrar a esta usa {propio} o la cabecera.'
+            ))

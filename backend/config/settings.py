@@ -141,6 +141,11 @@ SERVICE_IAM_URL = env('SERVICE_IAM_URL', default='http://iam-service:8000')
 # esta. Dejar vacío en producción — ahí el Host siempre debe resolver.
 DEFAULT_TENANT_SCHEMA = env('DEFAULT_TENANT_SCHEMA', default='')
 
+# Con qué nombre se crea esa institución la primera vez, si la base está vacía
+# (ver `ensure_default_tenant`). Cuando el IAM esté conectado, el nombre lo
+# manda él y este valor deja de usarse.
+DEFAULT_TENANT_NAME = env('DEFAULT_TENANT_NAME', default='')
+
 # Atajo de desarrollo: autentica cualquier petición como un usuario ficticio
 # mientras no exista pantalla de acceso. Ignorado si DEBUG=False.
 # APAGARLO en cuanto haya login.
@@ -161,7 +166,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-MEDIA_URL = 'media/'
+# Con barra inicial: el logotipo se sirve a un navegador que está en otro
+# puerto, así que la URL tiene que resolverse desde la raíz y no relativa a
+# la ruta que haya pedido.
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 LOGGING = {

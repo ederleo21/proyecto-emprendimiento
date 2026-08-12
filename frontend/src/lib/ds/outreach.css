@@ -1,0 +1,80 @@
+/* Lo que este proyecto agrega al design system de InnoTech.
+ *
+ * Se carga DESPUÉS de `tokens.css`, que es copia literal de su `global.css`.
+ * Todo lo que no exista allá va acá, para que aquel archivo se pueda volver a
+ * copiar sin tener que rescatar cambios mezclados.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────
+   Pasos de la escala de grises que faltan.
+
+   ESTO NO ESTÁ EN INNOTECH. Es la única diferencia deliberada con su
+   `global.css`, y conviene saber por qué:
+
+   Sus componentes piden `--ds-neutral-400`, `-50`, `-800` y `-900`, pero su
+   propio archivo solo define 100, 200, 300, 500, 600 y 700. Allá esas reglas
+   se descartan en silencio y el color queda sin aplicar.
+
+   La escala es Slate de Tailwind con los nombres corridos un paso, así que
+   los que faltan salen de la misma paleta — no son colores inventados.
+
+   Si algún día InnoTech los agrega, este bloque se borra.
+   ───────────────────────────────────────────────────────────────────── */
+
+:root {
+  --ds-neutral-50:  #FFFFFF;   /* más claro que el 100 (#F8FAFC) */
+  --ds-neutral-400: #CBD5E1;   /* entre el 300 (#E2E8F0) y el 500 (#94A3B8) */
+  --ds-neutral-800: #0F172A;   /* más oscuro que el 700 (#1E293B) */
+  --ds-neutral-900: #020617;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Compatibilidad con Tailwind.
+
+   Ocho de los componentes de InnoTech usan alguna clase de Tailwind suelta
+   —un ancho máximo, un color de texto—. Su monorepo lo tiene instalado; este
+   proyecto no, y por una sola docena de clases no vale la pena sumar la
+   dependencia y su paso de compilación.
+
+   Se declaran acá con los mismos valores que genera Tailwind, para no tener
+   que tocar los componentes copiados.
+   ───────────────────────────────────────────────────────────────────── */
+
+.max-w-md     { max-width: 28rem; }
+.max-w-2xl    { max-width: 42rem; }
+.max-w-4xl    { max-width: 56rem; }
+.max-w-6xl    { max-width: 72rem; }
+.max-w-\[95vw\] { max-width: 95vw; }
+
+.text-ds-neutral-400  { color: var(--ds-neutral-400, #94A3B8); }
+.text-ds-neutral-500  { color: var(--ds-neutral-500); }
+.text-ds-info-500     { color: var(--ds-info-500); }
+.text-ds-success-500  { color: var(--ds-success-500); }
+.text-ds-warning-500  { color: var(--ds-warning-500); }
+.text-ds-error-500    { color: var(--ds-error-500); }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Datos de tabla en mayúscula.
+
+   Se pone en el contenedor de la tabla y aplica a sus celdas de datos, no a
+   las cabeceras —esas ya vienen en mayúscula desde el componente—.
+
+   Por qué acá y no una prop del componente: `TableCell` es copia literal de
+   InnoTech y no se le mete mano. Su tabla normal muestra los datos tal como
+   vienen; la que sí los pone en mayúscula es `TreeTable`, con el comentario
+   "Datos en mayúscula y negrita por consistencia visual". Esto reproduce ese
+   criterio en la tabla normal, que es lo que este proyecto quiere.
+   ───────────────────────────────────────────────────────────────────── */
+
+.ds-datos-mayuscula tbody td {
+  text-transform: uppercase;
+}
+
+/* El contenido que ya trae su propio formato se deja en paz: un botón, un
+   texto de "sin resultados" o una barra de avance no son datos. */
+.ds-datos-mayuscula tbody td button,
+.ds-datos-mayuscula tbody td .empty,
+.ds-datos-mayuscula tbody td .empty-title,
+.ds-datos-mayuscula tbody td .empty-sub {
+  text-transform: none;
+}

@@ -10,7 +10,12 @@
    */
   interface Props {
     name: string;
-    size?: 'sm' | 'md' | 'lg';
+    /** `xs` · `sm` · `md` · `lg` · `xl`.
+     *
+     * Va como texto libre y no como unión cerrada porque el `Icon` de InnoTech
+     * tampoco lo tipa, y sus componentes copiados le pasan el tamaño calculado
+     * desde un mapa. Uno desconocido cae en `md`. */
+    size?: string;
     class?: string;
   }
 
@@ -33,16 +38,32 @@
     'arrows/chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'arrows/chevron-down': '<polyline points="6 9 12 15 18 9"/>',
     'user/user': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    // Los piden `ConfirmModal` y `RowActions`, copiados de InnoTech.
+    'design-system/close': '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    'interface/dots-vertical': '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+    // Los del `ConfirmModal`, uno por variante. Sin ellos, el círculo de la
+    // cabecera salía vacío.
+    'interface/check': '<polyline points="20 6 9 17 4 12"/>',
+    'interface/trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    'interface/save': '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+    // Los estados de validación del `Select`. Se declaran con el nombre que
+    // usa InnoTech para no tener que tocar su componente.
+    'design-system/check': '<polyline points="20 6 9 17 4 12"/>',
+    'design-system/alert': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    'design-system/error': '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
   };
 
-  const SIZES = { sm: 14, md: 18, lg: 24 } as const;
+  // Los cinco tamaños de InnoTech. Los componentes copiados de allá los piden
+  // por nombre, así que la escala tiene que existir aunque este proyecto solo
+  // use tres.
+  const SIZES: Record<string, number> = { xs: 12, sm: 14, md: 18, lg: 24, xl: 48 };
   const path = $derived(PATHS[name] ?? '');
 </script>
 
 <svg
   class="ds-icon {customClass}"
-  width={SIZES[size]}
-  height={SIZES[size]}
+  width={SIZES[size] ?? SIZES.md}
+  height={SIZES[size] ?? SIZES.md}
   viewBox="0 0 24 24"
   fill="none"
   stroke="currentColor"

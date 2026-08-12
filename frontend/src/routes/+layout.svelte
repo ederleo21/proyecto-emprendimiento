@@ -6,7 +6,10 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
+  // El orden importa: `tokens.css` es copia de InnoTech y `outreach.css` lo
+  // que este proyecto agrega encima.
   import '$lib/ds/tokens.css';
+  import '$lib/ds/outreach.css';
   import { branding } from '$lib/branding.svelte';
   import { auth } from '$lib/auth.svelte';
   import { isEmbedded } from '$lib/session';

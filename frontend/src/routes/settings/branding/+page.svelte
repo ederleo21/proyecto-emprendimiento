@@ -14,30 +14,43 @@
    * pantalla. Acá el aviso es cortesía, no seguridad.
    */
   import { onMount } from 'svelte';
-  import { Badge, Button, ProgressBar } from '$lib/ds';
+  import { Badge, Button, ProgressBar, TextField } from '$lib/ds';
   import { auth } from '$lib/auth.svelte';
   import { branding } from '$lib/branding.svelte';
 
+  let name = $state('');
+  let subtitle = $state('');
   let primary = $state('#349AFE');
   let secondary = $state('#150089');
   let saved = $state(false);
 
-  // Lo que está guardado, para saber si hay algo sin guardar y para el botón
-  // de descartar.
-  let originalPrimary = $state('#349AFE');
-  let originalSecondary = $state('#150089');
+  // Lo que está guardado, para saber si hay algo pendiente y para descartar.
+  let original = $state({ name: '', subtitle: '', primary: '', secondary: '' });
 
-  const dirty = $derived(primary !== originalPrimary || secondary !== originalSecondary);
+  let fileInput = $state<HTMLInputElement | null>(null);
+
+  const dirty = $derived(
+    name !== original.name ||
+    subtitle !== original.subtitle ||
+    primary !== original.primary ||
+    secondary !== original.secondary,
+  );
   const canEdit = $derived(!!auth.user?.is_superuser);
 
   onMount(() => {
-    primary = originalPrimary = branding.data.primary_color;
-    secondary = originalSecondary = branding.data.secondary_color;
-
+    sync();
     // Al salir de la pantalla sin guardar, la aplicación no puede quedarse con
     // los colores de la vista previa.
     return () => branding.restore();
   });
+
+  function sync() {
+    name = branding.data.name;
+    subtitle = branding.data.subtitle;
+    primary = branding.data.primary_color;
+    secondary = branding.data.secondary_color;
+    original = { name, subtitle, primary, secondary };
+  }
 
   // Cada cambio de color repinta los tokens al instante.
   $effect(() => {
@@ -45,18 +58,34 @@
   });
 
   function discard() {
-    primary = originalPrimary;
-    secondary = originalSecondary;
+    name = original.name;
+    subtitle = original.subtitle;
+    primary = original.primary;
+    secondary = original.secondary;
     saved = false;
   }
 
   async function save() {
     saved = false;
-    if (await branding.save(primary, secondary)) {
-      originalPrimary = primary;
-      originalSecondary = secondary;
+    const ok = await branding.save({
+      name,
+      subtitle,
+      primary_color: primary,
+      secondary_color: secondary,
+    });
+    if (ok) {
+      original = { name, subtitle, primary, secondary };
       saved = true;
     }
+  }
+
+  async function onFilePicked(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    await branding.uploadLogo(file);
+    // Se limpia para poder volver a elegir el mismo archivo si hizo falta.
+    input.value = '';
   }
 </script>
 
@@ -95,6 +124,67 @@
   {/if}
 
   <section class="panel">
+    <div class="panel-head">
+      <h2>Nombre y logotipo</h2>
+      <p>Lo que se ve en la cabecera de todas las pantallas.</p>
+    </div>
+
+    <div class="identity">
+      <div class="logo-box">
+        {#if branding.data.logo_url}
+          <img src={branding.data.logo_url} alt="Logotipo de {branding.data.name}" />
+        {:else}
+          <span class="logo-initial">{name.charAt(0) || '·'}</span>
+        {/if}
+      </div>
+
+      <div class="logo-actions">
+        <span class="logo-title">Logotipo</span>
+        <span class="logo-hint">PNG, JPG, SVG o WEBP. Hasta 2 MB.</span>
+        <div class="logo-buttons">
+          <Button variant="outline" size="sm" disabled={branding.saving}
+                  onclick={() => fileInput?.click()}>
+            {branding.data.logo_url ? 'Reemplazar' : 'Subir'}
+          </Button>
+          {#if branding.data.logo_url}
+            <Button variant="outline" size="sm" disabled={branding.saving}
+                    onclick={() => branding.removeLogo()}>
+              Quitar
+            </Button>
+          {/if}
+        </div>
+        <input
+          bind:this={fileInput}
+          type="file"
+          accept=".png,.jpg,.jpeg,.svg,.webp"
+          onchange={onFilePicked}
+          hidden
+        />
+      </div>
+    </div>
+
+    <div class="texts">
+      <div class="field">
+        <TextField label="Nombre de la institución" bind:value={name} />
+        <span class="hint">
+          Si se conecta el IAM de InnoTech, la próxima sincronización lo
+          reemplazará por el que tenga allá.
+        </span>
+      </div>
+      <div class="field">
+        <TextField label="Subtítulo" bind:value={subtitle}
+                   placeholder="Vinculación con la Sociedad" />
+        <span class="hint">La línea pequeña debajo del nombre.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Colores</h2>
+      <p>Se aplican en toda la aplicación apenas los mueves.</p>
+    </div>
+
     <div class="swatches">
       <div class="swatch">
         <div class="swatch-preview" style="background: {primary}">
@@ -163,8 +253,34 @@
   .panel {
     background: #fff; border: 1px solid var(--ds-neutral-200, #eef2f6);
     border-radius: 12px; padding: 24px;
-    display: flex; flex-direction: column; gap: 28px;
+    display: flex; flex-direction: column; gap: 24px;
   }
+  .panel-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--ds-neutral-800, #1e293b); }
+  .panel-head p { margin: 6px 0 0; font-size: 12.5px; color: var(--ds-neutral-500, #64748b); }
+
+  /* Nombre y logotipo */
+  .identity { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+
+  .logo-box {
+    width: 96px; height: 96px; flex-shrink: 0;
+    border: 1px dashed var(--ds-neutral-300, #cbd5e1); border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; background: var(--ds-neutral-100, #f8fafc);
+  }
+  .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .logo-initial {
+    font-size: 34px; font-weight: 800;
+    color: var(--ds-brand-500);
+  }
+
+  .logo-actions { display: flex; flex-direction: column; gap: 4px; }
+  .logo-title { font-size: 13px; font-weight: 700; color: var(--ds-neutral-700, #334155); }
+  .logo-hint { font-size: 11px; color: var(--ds-neutral-400, #94a3b8); }
+  .logo-buttons { display: flex; gap: 8px; margin-top: 8px; }
+
+  .texts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .hint { font-size: 11px; color: var(--ds-neutral-400, #94a3b8); line-height: 1.45; }
 
   .swatches { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
 
@@ -215,6 +331,6 @@
   }
 
   @media (max-width: 640px) {
-    .swatches { grid-template-columns: 1fr; }
+    .swatches, .texts { grid-template-columns: 1fr; }
   }
 </style>

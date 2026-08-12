@@ -1,92 +1,130 @@
+<!-- Copia de `@innotech/ui-svelte/components/inputs/TextField.svelte` del monorepo de
+     InnoTech. Único cambio: la ruta del `Icon`, que acá vive en la misma
+     carpeta.
+
+     Reemplaza al que estaba hecho acá, que declaraba por su cuenta las
+     clases `.ds-field` y `.ds-field-label`. Al traer el `global.css`
+     completo esas clases pasaron a existir también allí, y el campo salía
+     con doble borde. -->
 <script lang="ts">
-  /* Campo de texto.
-   *
-   * Firma alineada con `@innotech/ui-svelte/TextField`: `label`, `value`
-   * bindable, `type`, `placeholder`, `size`, `oninput`.
-   */
-  interface Props {
-    label?: string;
-    value?: string | number;
-    type?: 'text' | 'number' | 'email' | 'password' | 'date';
-    placeholder?: string;
-    size?: 'sm' | 'md' | 'lg';
-    disabled?: boolean;
-    error?: string;
-    rows?: number;
-    /** Si viene, se pinta un `textarea` en vez de un `input`. */
-    multiline?: boolean;
-    class?: string;
-    oninput?: (value: any) => void;
-    [key: string]: any;
-  }
+	import Icon from './Icon.svelte';
+	import type { Snippet } from 'svelte';
 
-  let {
-    label = '',
-    value = $bindable(''),
-    type = 'text',
-    placeholder = '',
-    size = 'md',
-    disabled = false,
-    error = '',
-    rows = 3,
-    multiline = false,
-    class: customClass = '',
-    oninput,
-    ...rest
-  }: Props = $props();
+	interface Props {
+		label?: string;
+		placeholder?: string;
+		value?: any;
+		type?: string;
+		status?: 'Default' | 'Focused' | 'Success' | 'Warning' | 'Error';
+		message?: string;
+		size?: 'sm' | 'md' | 'lg';
+		prefix?: Snippet;
+		suffix?: Snippet;
+		externalPrefix?: Snippet;
+		externalSuffix?: Snippet;
+		labelClass?: string;
+		onchange?: (value: any) => void;
+		oninput?: (value: any) => void;
+		class?: string;
+		[key: string]: any;
+	}
 
-  function handle(e: Event) {
-    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
-    value = target.value;
-    oninput?.(target.value);
-  }
+	let { 
+		label = '', 
+		labelClass = '',
+		placeholder = '', 
+		value = $bindable(), 
+		type = 'text', 
+		status = 'Default', 
+		message = '', 
+		size = 'md', 
+		prefix, 
+		suffix,
+		externalPrefix,
+		externalSuffix,
+		id = `tf-${Math.random().toString(36).substring(2, 9)}`,
+		class: customClass = '',
+		onchange,
+		oninput,
+		...rest
+	}: Props = $props();
+
+	const statusColors: Record<string, string> = {
+		Default: 'text-ds-neutral-500',
+		Focused: 'text-ds-info-500',
+		Success: 'text-ds-success-500',
+		Warning: 'text-ds-warning-500',
+		Error: 'text-ds-error-500'
+	};
+
+	const statusIcons: Record<string, string> = {
+		Success: 'design-system/check',
+		Warning: 'design-system/alert',
+		Error: 'design-system/error'
+	};
+
+	let isFocused = $state(false);
+	const activeStatus = $derived(isFocused ? 'Focused' : status);
+
+	function handleInput(event: Event) {
+		const target = event.currentTarget as HTMLInputElement;
+		value = target.value;
+		oninput?.(target.value);
+		onchange?.(target.value);
+	}
 </script>
 
-<div class="ds-field {customClass}">
-  {#if label}<label class="ds-field-label">{label}</label>{/if}
-  {#if multiline}
-    <textarea
-      class="ds-field-input ds-field-{size}"
-      class:has-error={!!error}
-      {placeholder} {disabled} {rows} {value}
-      oninput={handle}
-      {...rest}
-    ></textarea>
-  {:else}
-    <input
-      class="ds-field-input ds-field-{size}"
-      class:has-error={!!error}
-      {type} {placeholder} {disabled} {value}
-      oninput={handle}
-      {...rest}
-    />
-  {/if}
-  {#if error}<span class="ds-field-error">{error}</span>{/if}
+<div class="ds-input-container {customClass}">
+	{#if label}
+		<label class="ds-field-label BodyM {labelClass}" for={id}>{label}</label>
+	{/if}
+
+	<div class="ds-field {activeStatus.toLowerCase()} {size} 
+		{prefix ? 'has-prefix' : ''} 
+		{suffix ? 'has-suffix' : ''} 
+		{externalPrefix ? 'has-external-prefix' : ''} 
+		{externalSuffix ? 'has-external-suffix' : ''}"
+	>
+		{#if externalPrefix}
+			<div class="ds-external-prefix">{@render externalPrefix()}</div>
+		{/if}
+
+		{#if prefix}
+			<div class="ds-prefix">
+				{@render prefix()}
+			</div>
+		{/if}
+
+		<input 
+			{id}
+			{type} 
+			{placeholder} 
+			bind:value 
+			class="ds-input" 
+			oninput={handleInput}
+			onfocus={() => isFocused = true}
+			onblur={() => isFocused = false}
+			onwheel={(e) => { if (type === 'number') e.preventDefault() }}
+			{...rest}
+		/>
+
+		{#if suffix}
+			<div class="ds-suffix">
+				{@render suffix()}
+			</div>
+		{/if}
+
+		{#if externalSuffix}
+			<div class="ds-external-suffix">{@render externalSuffix()}</div>
+		{/if}
+	</div>
+
+	{#if message}
+		<div class="ds-message {status.toLowerCase()}">
+			{#if statusIcons[status]}
+				<Icon name={statusIcons[status]} size="sm" class="!{statusColors[status]}" />
+			{/if}
+			<span class="CaptionSM {statusColors[status]}">{message}</span>
+		</div>
+	{/if}
 </div>
-
-<style>
-  .ds-field { display: flex; flex-direction: column; gap: 6px; }
-  .ds-field-label {
-    font-size: 13px; font-weight: 600; color: var(--ds-neutral-600, #475569);
-  }
-  .ds-field-input {
-    width: 100%; box-sizing: border-box; font-family: inherit;
-    border: 1px solid var(--ds-neutral-300, #e2e8f0); border-radius: 8px;
-    background: #fff; color: var(--ds-neutral-800, #1e293b);
-    transition: border-color 0.18s, box-shadow 0.18s;
-  }
-  .ds-field-input::placeholder { color: var(--ds-neutral-400, #94a3b8); }
-  .ds-field-input:focus {
-    outline: none; border-color: var(--ds-brand-500);
-    box-shadow: 0 0 0 3px var(--ds-brand-100);
-  }
-  .ds-field-input:disabled { background: var(--ds-neutral-100, #f1f5f9); cursor: not-allowed; }
-  .has-error { border-color: var(--ds-error-500); }
-
-  .ds-field-sm { padding: 6px 10px; font-size: 12px; }
-  .ds-field-md { padding: 9px 12px; font-size: 13px; }
-  .ds-field-lg { padding: 12px 14px; font-size: 15px; }
-
-  .ds-field-error { font-size: 12px; color: var(--ds-error-600); }
-  textarea.ds-field-input { resize: vertical; min-height: 70px; line-height: 1.5; }
-</style>

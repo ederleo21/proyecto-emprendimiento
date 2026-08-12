@@ -8,6 +8,11 @@ Los colores se guardan como texto y terminan dentro de un `style` del
 navegador, así que el formato se valida en el servidor y no solo en la
 pantalla.
 """
+import shutil
+import tempfile
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -30,6 +35,130 @@ class BrandingReadTests(TenantTestCase):
         data = self.client.get(reverse('v1:branding')).json()['data']
         self.assertIn('primary_color', data)
         self.assertIn('secondary_color', data)
+
+    def test_it_returns_the_identity_fields(self):
+        data = self.client.get(reverse('v1:branding')).json()['data']
+        for field in ('name', 'subtitle', 'logo_url'):
+            self.assertIn(field, data)
+
+    def test_without_a_logo_the_url_is_null_and_not_an_error(self):
+        """La cabecera decide entre el logo y la inicial mirando este campo."""
+        self.assertIsNone(self.client.get(reverse('v1:branding')).json()['data']['logo_url'])
+
+
+class BrandingLogoTests(TenantTestCase):
+    """Subir y quitar el logotipo.
+
+    Va por su propia ruta porque un archivo viaja como `multipart` y el resto
+    de la identidad como JSON.
+
+    Los archivos van a un directorio temporal y **no** al de la aplicación: la
+    suite corre como root y dejaría carpetas que el servidor, que corre con
+    otro usuario, después no puede escribir.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._media = tempfile.mkdtemp()
+        cls._override = override_settings(MEDIA_ROOT=cls._media)
+        cls._override.enable()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._override.disable()
+        shutil.rmtree(cls._media, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.url = reverse('v1:branding-logo')
+        self.admin = User.objects.create_superuser(username='jefa', password='x')
+        self.plain = User.objects.create_user(username='comun', password='x')
+        self.tenant.refresh_from_db()
+
+    def tearDown(self):
+        self.tenant.refresh_from_db()
+        if self.tenant.logo:
+            self.tenant.logo.delete(save=True)
+
+    def _headers(self, user):
+        return {'HTTP_AUTHORIZATION': f"Bearer {issue_tokens(user)['access']}"}
+
+    def _png(self, name='logo.png', size=64):
+        # Un PNG mínimo de verdad, para que la validación de extensión y peso
+        # trabaje sobre un archivo real.
+        return SimpleUploadedFile(name, b'\x89PNG\r\n\x1a\n' + b'0' * size, 'image/png')
+
+    def test_an_admin_can_upload_it(self):
+        response = self.client.post(
+            self.url, {'logo': self._png()}, **self._headers(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json()['data']['logo_url'])
+
+    def test_a_regular_user_cannot(self):
+        response = self.client.post(
+            self.url, {'logo': self._png()}, **self._headers(self.plain),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_a_forbidden_extension_is_rejected(self):
+        """Lo que se sube termina servido a un navegador: no puede ser
+        cualquier cosa."""
+        malo = SimpleUploadedFile('script.html', b'<script>alert(1)</script>', 'text/html')
+        response = self.client.post(self.url, {'logo': malo}, **self._headers(self.admin))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('logo', response.json()['errors'])
+
+    def test_a_file_that_is_too_heavy_is_rejected(self):
+        """El tope evita que alguien suba la foto de un evento por
+        equivocación y la cabecera tarde en cargar."""
+        pesado = SimpleUploadedFile('grande.png', b'\x89PNG' + b'0' * (3 * 1024 * 1024), 'image/png')
+        response = self.client.post(self.url, {'logo': pesado}, **self._headers(self.admin))
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_uploading_without_a_file_says_so(self):
+        response = self.client.post(self.url, {}, **self._headers(self.admin))
+        self.assertEqual(response.status_code, 400)
+
+    def test_it_can_be_removed(self):
+        self.client.post(self.url, {'logo': self._png()}, **self._headers(self.admin))
+
+        response = self.client.delete(self.url, **self._headers(self.admin))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()['data']['logo_url'])
+
+    def test_every_endpoint_returns_an_absolute_url(self):
+        """El navegador que la consume está en otro puerto: una ruta relativa
+        la buscaría en su propio servidor y saldría la imagen rota.
+
+        Se comprueban las tres respuestas que traen el logo, porque el fallo
+        real fue que una de ellas la devolvía relativa.
+        """
+        subida = self.client.post(
+            self.url, {'logo': self._png()}, **self._headers(self.admin),
+        ).json()['data']['logo_url']
+
+        publica = self.client.get(reverse('v1:branding')).json()['data']['logo_url']
+
+        admin = self.client.get(
+            reverse('v1:branding-settings'), **self._headers(self.admin),
+        ).json()['data']['logo_url']
+
+        for donde, url in (('al subir', subida), ('branding público', publica),
+                           ('branding editable', admin)):
+            self.assertTrue(
+                url and url.startswith('http'),
+                f'La URL de {donde} no es absoluta: {url!r}',
+            )
+
+    def test_removing_when_there_is_none_does_not_fail(self):
+        self.assertEqual(
+            self.client.delete(self.url, **self._headers(self.admin)).status_code, 200,
+        )
 
 
 class BrandingWriteTests(TenantTestCase):
@@ -116,3 +245,41 @@ class BrandingWriteTests(TenantTestCase):
 
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.primary_color, before)
+
+    # ── Nombre y subtítulo ───────────────────────────────────────────
+
+    def test_the_name_can_be_corrected(self):
+        """Sin IAM nadie más puede arreglarlo: `create_tenant_local` solo pone
+        el nombre al crear, así que un error quedaría congelado."""
+        response = self._patch({'name': 'Instituto Corregido'}, user=self.admin)
+        self.assertEqual(response.status_code, 200)
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.name, 'Instituto Corregido')
+
+    def test_an_empty_name_is_rejected(self):
+        """La cabecera se queda sin nada que mostrar y la inicial del logo
+        tampoco se puede calcular."""
+        response = self._patch({'name': '   '}, user=self.admin)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('name', response.json()['errors'])
+
+    def test_the_subtitle_can_be_changed(self):
+        self._patch({'subtitle': 'Vinculación y Emprendimiento'}, user=self.admin)
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.subtitle, 'Vinculación y Emprendimiento')
+
+    def test_the_subtitle_can_be_emptied(self):
+        """A diferencia del nombre, quedarse sin subtítulo es una opción
+        válida: la cabecera simplemente no lo muestra."""
+        response = self._patch({'subtitle': ''}, user=self.admin)
+        self.assertEqual(response.status_code, 200)
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.subtitle, '')
+
+    def test_a_name_that_is_too_long_is_rejected(self):
+        self.assertEqual(
+            self._patch({'name': 'x' * 300}, user=self.admin).status_code, 400,
+        )

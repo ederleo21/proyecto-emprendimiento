@@ -1,7 +1,61 @@
 """Serializers del Proyecto de Emprendimiento."""
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Project, ProjectActivity, Stage, StageActivity
+from .models import Configuration, Project, ProjectActivity, Stage, StageActivity
+
+
+def next_project_code() -> str:
+    """Siguiente código libre, con el formato que configuró la institución.
+
+    El prefijo, el año y los dígitos salen de `Configuration`, no de constantes:
+    una institución puede querer `EMP-0001` y otra `PE-2026-001`.
+
+    Se busca contra `all_objects` —el manager que ve también lo archivado— y no
+    contra `objects`. La constraint de unicidad solo mira las filas vivas, así
+    que técnicamente se podría reusar el código de un proyecto archivado; pero
+    un código lo lee una persona y termina en actas, así que reciclarlo sería
+    confuso. Una vez usado, no vuelve.
+    """
+    config = Configuration.load()
+    year = timezone.now().year
+    prefix = config.code_prefix(year)
+
+    used = set(
+        Project.all_objects
+        .filter(code__startswith=prefix)
+        .values_list('code', flat=True)
+    )
+    number = len(used) + 1
+    while config.format_code(year, number) in used:
+        number += 1
+    return config.format_code(year, number)
+
+
+class ConfigurationSerializer(serializers.ModelSerializer):
+    """Parámetros del módulo para esta institución.
+
+    `code_example` no es un campo guardado: es cómo quedaría el próximo código
+    con lo que hay puesto. Va en la respuesta porque la pantalla necesita
+    mostrar el efecto de cada cambio, y armar el formato de nuevo del lado del
+    navegador sería repetir la regla que ya vive acá.
+    """
+
+    code_example = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Configuration
+        fields = [
+            'id',
+            'project_code_prefix',
+            'project_code_include_year',
+            'project_code_digits',
+            'code_example',
+        ]
+        read_only_fields = ['id']
+
+    def get_code_example(self, obj) -> str:
+        return obj.format_code(timezone.now().year, 1)
 
 
 class StageActivitySerializer(serializers.ModelSerializer):
@@ -41,7 +95,10 @@ class ProjectSerializer(serializers.ModelSerializer):
             'progress', 'is_active',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        # El código lo pone el sistema y no se edita: identifica al proyecto en
+        # actas y conversaciones, así que cambiarlo rompería referencias que ya
+        # están fuera de la aplicación.
+        read_only_fields = ['id', 'code', 'created_at', 'updated_at']
         extra_kwargs = {
             'title': {
                 'error_messages': {
@@ -50,6 +107,10 @@ class ProjectSerializer(serializers.ModelSerializer):
                 },
             },
         }
+
+    def create(self, validated_data):
+        validated_data['code'] = next_project_code()
+        return super().create(validated_data)
 
 
 class ProjectStageSerializer(serializers.Serializer):

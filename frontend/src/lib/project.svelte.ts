@@ -33,6 +33,8 @@ export interface ProjectHead {
   id: string;
   code: string;
   title: string;
+  /** Id de la etapa actual. Nulo mientras el proyecto no arranque. */
+  stage: string | null;
   stage_name: string | null;
   progress: number;
 }
@@ -44,6 +46,7 @@ class ProjectState {
   stages = $state<ProjectStage[]>([]);
 
   loading = $state(false);
+  saving = $state(false);
   errorMessage = $state('');
   /** Etapa abierta en el panel de actividades. `null` = solo el tablero. */
   openStage = $state<string | null>(null);
@@ -51,6 +54,16 @@ class ProjectState {
   stage(code: string) {
     return this.stages.find((s) => s.code === code) ?? null;
   }
+
+  /** Las etapas como opciones para elegir en qué va el proyecto.
+   *
+   * La primera deja el proyecto sin etapa: un proyecto recién creado todavía
+   * no arrancó el proceso, y eso tiene que poder deshacerse.
+   */
+  stageChoices = $derived([
+    { value: '', label: 'Sin etapa' },
+    ...this.stages.map((s) => ({ value: s.id, label: s.name })),
+  ]);
 
   async load(id: string) {
     this.loading = true;
@@ -65,6 +78,32 @@ class ProjectState {
       this.errorMessage = e instanceof ApiError ? e.firstMessage : String(e);
     } finally {
       this.loading = false;
+    }
+  }
+
+  /** Mueve el proyecto a otra etapa, o lo deja sin ninguna.
+   *
+   * Es un cambio manual a propósito. Si el proceso avanza solo al llegar al
+   * 100%, o exige cerrar una etapa para abrir la siguiente, eso todavía no
+   * está definido — y aun cuando lo esté, va a hacer falta poder corregir.
+   */
+  async setStage(stageId: string): Promise<boolean> {
+    if (!this.project) return false;
+    this.saving = true;
+    this.errorMessage = '';
+    try {
+      await api.patch(`${BASE}/projects/${this.project.id}/`, {
+        stage: stageId || null,
+      });
+      // Se relee entero: la etapa no cambia el avance, pero el detalle es la
+      // única fuente de la cabecera y así no quedan dos verdades.
+      await this.load(this.project.id);
+      return true;
+    } catch (e) {
+      this.errorMessage = e instanceof ApiError ? e.firstMessage : String(e);
+      return false;
+    } finally {
+      this.saving = false;
     }
   }
 

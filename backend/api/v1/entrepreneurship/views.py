@@ -13,14 +13,17 @@ from uuid import UUID
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.views import APIView
 
 from core.my_response import MyResponse
+from core.permissions import HasOutreachPermission
 from entrepreneurship.models import (
-    Project, ProjectActivity, Stage, StageActivity,
+    Configuration, Project, ProjectActivity, Stage, StageActivity,
 )
 from entrepreneurship.serializers import (
-    ProjectSerializer, StageActivitySerializer, StageSerializer,
+    ConfigurationSerializer, ProjectSerializer, StageActivitySerializer,
+    StageSerializer,
 )
 
 
@@ -43,8 +46,40 @@ def _create_fixed_activities(project):
     )
 
 
+class ConfigurationView(APIView):
+    """`GET`/`PATCH /configuration/` — los parámetros del módulo.
+
+    Mirar y cambiar llevan permisos distintos: un coordinador puede necesitar
+    ver con qué formato se numeran los proyectos sin poder cambiarlo. Un cambio
+    acá le altera el comportamiento del módulo a toda la institución.
+    """
+
+    permission_classes = [IsAuthenticated, HasOutreachPermission]
+    required_permissions = {
+        'GET': 'OUTREACH_SETTINGS_VIEW',
+        'PATCH': 'OUTREACH_SETTINGS_EDIT',
+    }
+
+    def get(self, request):
+        return MyResponse.success(
+            data=ConfigurationSerializer(Configuration.load()).data,
+            message='Configuración del módulo.',
+        )
+
+    def patch(self, request):
+        config = Configuration.load()
+        ser = ConfigurationSerializer(config, data=request.data, partial=True)
+        if not ser.is_valid():
+            return MyResponse.error(message='Datos inválidos.', errors=ser.errors)
+        ser.save()
+        return MyResponse.success(data=ser.data, message='Configuración actualizada.')
+
+
 class StageListView(APIView):
     """`GET /stages/` — las etapas del proceso, en orden."""
+
+    permission_classes = [IsAuthenticated, HasOutreachPermission]
+    required_permissions = {'GET': 'OUTREACH_CATALOG_VIEW'}
 
     def get(self, request):
         rows = Stage.objects.filter(is_active=True)
@@ -56,6 +91,12 @@ class StageListView(APIView):
 
 class ProjectListCreateView(APIView):
     """`GET /projects/` con filtros · `POST /projects/` para el alta."""
+
+    permission_classes = [IsAuthenticated, HasOutreachPermission]
+    required_permissions = {
+        'GET': 'OUTREACH_PROJECT_VIEW',
+        'POST': 'OUTREACH_PROJECT_CREATE',
+    }
 
     def get_queryset(self):
         qs = Project.objects.select_related('stage').prefetch_related(
@@ -136,11 +177,52 @@ class ProjectListCreateView(APIView):
 
 
 class ProjectDetailView(APIView):
-    """`GET /projects/<id>/` — el proyecto con sus etapas y su avance.
+    """`GET`/`PATCH`/`DELETE /projects/<id>/`.
 
-    Es lo que alimenta el tablero: cinco tarjetas, una por etapa, cada una con
+    El `GET` alimenta el tablero: cinco tarjetas, una por etapa, cada una con
     su porcentaje y sus actividades.
     """
+
+    permission_classes = [IsAuthenticated, HasOutreachPermission]
+    required_permissions = {
+        'GET': 'OUTREACH_PROJECT_VIEW',
+        'PATCH': 'OUTREACH_PROJECT_EDIT',
+        'DELETE': 'OUTREACH_PROJECT_ARCHIVE',
+    }
+
+    def patch(self, request, pk):
+        """Corrige los datos del proyecto. El código no se toca: es de solo
+        lectura en el serializer."""
+        project = Project.objects.filter(pk=pk).first()
+        if project is None:
+            return MyResponse.error(message='Proyecto no encontrado.', status_code=404)
+
+        ser = ProjectSerializer(project, data=request.data, partial=True)
+        if not ser.is_valid():
+            return MyResponse.error(message='Datos inválidos.', errors=ser.errors)
+        ser.save()
+
+        return MyResponse.success(data=ser.data, message='Proyecto actualizado.')
+
+    def delete(self, request, pk):
+        """Archiva el proyecto. El borrado es lógico: nada desaparece.
+
+        Se archivan también sus actividades. El `CASCADE` de la FK no sirve
+        acá: `BaseModel` marca la fila en vez de borrarla, así que la base
+        nunca ve un borrado y las hijas quedarían vivas apuntando a un padre
+        archivado. Hay que hacerlo a mano — el mismo problema que documenta
+        `academic_service` con `PROTECT`.
+        """
+        project = Project.objects.filter(pk=pk).first()
+        if project is None:
+            return MyResponse.error(message='Proyecto no encontrado.', status_code=404)
+
+        now = timezone.now()
+        with transaction.atomic():
+            project.activities.update(deleted_at=now, updated_at=now)
+            project.delete()
+
+        return MyResponse.success(message='Proyecto archivado.')
 
     def get(self, request, pk):
         project = (
@@ -189,7 +271,14 @@ class ProjectActivityToggleView(APIView):
 
     Es la casilla del checklist. Con `applies` se agrega o se quita una
     actividad elegible del proyecto; con `is_confirmed` se marca hecha.
+
+    Las dos cosas viajan en el mismo `POST`, así que el permiso declarado cubre
+    confirmar y el de elegir se comprueba en su propia rama: armar el plan del
+    proyecto y declarar que algo se hizo son decisiones distintas.
     """
+
+    permission_classes = [IsAuthenticated, HasOutreachPermission]
+    required_permissions = {'POST': 'OUTREACH_ACTIVITY_CONFIRM'}
 
     @staticmethod
     def _reloaded(project):
@@ -216,6 +305,16 @@ class ProjectActivityToggleView(APIView):
 
         applies = request.data.get('applies')
         confirmed = request.data.get('is_confirmed')
+
+        # Elegir qué actividades opcionales aplican arma el plan del proyecto;
+        # es otra decisión que declarar una hecha, y lleva su propio permiso.
+        if applies is not None and not request.user.has_iam_permission(
+            'OUTREACH_ACTIVITY_SELECT'
+        ):
+            return MyResponse.error(
+                message='No tiene permiso para elegir las actividades del proyecto.',
+                status_code=403,
+            )
 
         # Quitar del proyecto una actividad elegible.
         if applies is False:
@@ -268,6 +367,9 @@ class StageMetricsView(APIView):
     etapas, incluidas las que están en cero: la tarjeta tiene que aparecer
     igual, si no la fila de métricas cambia de ancho según los datos.
     """
+
+    permission_classes = [IsAuthenticated, HasOutreachPermission]
+    required_permissions = {'GET': 'OUTREACH_PROJECT_VIEW'}
 
     def get(self, request):
         counts = {}

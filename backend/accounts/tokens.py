@@ -28,21 +28,36 @@ def _sign(payload: dict) -> str:
 
 def _base_claims(user, tenant=None) -> dict:
     """Claims compatibles con los que emite el IAM."""
+    todas = list(
+        user.memberships.select_related('tenant', 'role').prefetch_related('role__permissions')
+    )
     memberships = [
         {
             'tenant_id': str(m.tenant_id),
             'tenant_name': m.tenant.name,
             'tenant_slug': m.tenant.schema_name,
-            'role_name': m.role,
+            'role_name': m.role.name if m.role else '',
         }
-        for m in user.memberships.select_related('tenant').all()
+        for m in todas
     ]
 
     # Si no se indicó institución se toma la primera: con una sola membresía
     # —el caso normal— no tiene sentido preguntar.
-    active = tenant
-    if active is None and memberships:
-        active = user.memberships.select_related('tenant').first().tenant
+    activa = None
+    if tenant is not None:
+        activa = next((m for m in todas if m.tenant_id == tenant.id), None)
+    elif todas:
+        activa = todas[0]
+
+    active = activa.tenant if activa else tenant
+
+    # Los permisos son los del rol **en esa institución**: la misma persona
+    # puede ser coordinadora en una y solo lectora en otra.
+    permisos = sorted(activa.role.permission_codes) if activa and activa.role else []
+    rol_activo = (
+        {'id': str(activa.role_id), 'code': activa.role.code, 'name': activa.role.name}
+        if activa and activa.role else None
+    )
 
     return {
         # IAM usa `user_id` (SimpleJWT). Los demás claims van igual que allá.
@@ -52,11 +67,14 @@ def _base_claims(user, tenant=None) -> dict:
         'full_name': user.full_name,
         'is_staff': user.is_staff,
         'is_superuser': user.is_superuser,
-        # Todavía no hay catálogo de permisos en este servicio. Se manda la
-        # lista vacía para que el claim exista y `has_iam_permission` funcione
-        # sin ramas especiales; un superusuario pasa igual.
-        'permissions': [],
+        # Los permisos que trae el rol de la persona en la institución activa.
+        # Van resueltos dentro del token, igual que los emite el IAM: así una
+        # vista los comprueba sin consultar la base en cada petición.
+        'permissions': permisos,
+        # Existe para igualar el formato del IAM, que permite quitarle un
+        # permiso puntual a alguien. Acá todavía no hay forma de hacerlo.
         'denied_permissions': [],
+        'active_role': rol_activo,
         'memberships': memberships,
         'tenant_id': str(active.id) if active else None,
         'active_tenant': (

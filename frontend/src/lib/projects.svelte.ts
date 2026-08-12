@@ -78,9 +78,18 @@ class ProjectsState {
   pageSize = $state(10);
   totalPages = $state(1);
 
+  /** Para el filtro de la barra: por código, que es lo que la API acepta y lo
+   *  que se lee en la URL. */
   stageOptions = $derived([
     { value: '', label: 'Todos' },
     ...this.stages.map((s) => ({ value: s.code, label: s.name })),
+  ]);
+
+  /** Para elegir en qué etapa va un proyecto: por id, que es lo que guarda la
+   *  relación. La primera opción lo deja sin etapa. */
+  stageChoices = $derived([
+    { value: '', label: 'Sin etapa' },
+    ...this.stages.map((s) => ({ value: s.id, label: s.name })),
   ]);
 
   /** Las tarjetas de métricas, en el formato que espera `StatCards`.
@@ -156,6 +165,60 @@ class ProjectsState {
   async applyFilters() {
     this.page = 1;
     await this.loadProjects();
+  }
+
+  /** Corrige los datos de un proyecto. El código no se toca: lo pone el
+   *  sistema y es de solo lectura en el backend. */
+  async updateProject(id: string, title: string): Promise<boolean> {
+    this.saving = true;
+    this.errorMessage = '';
+    try {
+      await api.patch(`${BASE}/projects/${id}/`, { title });
+      // Solo el listado: editar un título no mueve las métricas.
+      await this.loadProjects();
+      return true;
+    } catch (e) {
+      this.errorMessage = e instanceof ApiError ? e.firstMessage : String(e);
+      return false;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /** Mueve un proyecto a otra etapa, o lo deja sin ninguna. */
+  async setStage(id: string, stageId: string): Promise<boolean> {
+    this.saving = true;
+    this.errorMessage = '';
+    try {
+      await api.patch(`${BASE}/projects/${id}/`, { stage: stageId || null });
+      // Se recarga todo: cambiar de etapa mueve las tarjetas de arriba, no
+      // solo la fila.
+      await this.loadAll();
+      return true;
+    } catch (e) {
+      this.errorMessage = e instanceof ApiError ? e.firstMessage : String(e);
+      return false;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /** Archiva un proyecto. No se borra: el backend lo marca. */
+  async archiveProject(id: string): Promise<boolean> {
+    this.saving = true;
+    this.errorMessage = '';
+    try {
+      await api.delete(`${BASE}/projects/${id}/`);
+      // Se recarga todo: al archivar cambian las métricas y puede quedar una
+      // página vacía si era el último de la suya.
+      await this.loadAll();
+      return true;
+    } catch (e) {
+      this.errorMessage = e instanceof ApiError ? e.firstMessage : String(e);
+      return false;
+    } finally {
+      this.saving = false;
+    }
   }
 
   /** Devuelve el proyecto creado, o `null` si falló. */

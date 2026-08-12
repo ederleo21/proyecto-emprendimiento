@@ -30,6 +30,12 @@ if [ $# -eq 0 ]; then
     python manage.py sync_tenants \
         || echo "[entrypoint] sync_tenants falló (IAM no disponible), se continúa."
 
+    # Si tras lo anterior no hay ninguna institución, se crea la del `.env` con
+    # su catálogo. Así un clon recién levantado ya tiene algo que mostrar en vez
+    # de una pantalla vacía y un comando que buscar en el README.
+    python manage.py ensure_default_tenant \
+        || echo "[entrypoint] ensure_default_tenant falló, se continúa."
+
     echo "Arrancando servidor..."
     # `--noreload`: el autoreload no ve los cambios a través del bind-mount en
     # Windows y solo duplica el proceso. Los cambios exigen reiniciar igual.

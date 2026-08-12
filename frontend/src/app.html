@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
     %sveltekit.head%
+    <!--
+      Los colores de la institución, aplicados antes de que se pinte la página.
+
+      Tiene que ir acá y no en un módulo: el navegador dibuja en cuanto tiene el
+      CSS, y para cuando se ejecuta el JavaScript de la aplicación ya pintó una
+      vez con los colores por defecto. Eso es el parpadeo al recargar.
+
+      Este script es síncrono y está antes del cuerpo, así que corre primero.
+
+      No calcula nada: la aplicación deja las variables ya resueltas en
+      `outreach.branding.vars` (ver `lib/branding.svelte.ts`). Duplicar acá la
+      matemática de la escala de color sería tener la misma regla en dos sitios.
+    -->
+    <script>
+      try {
+        var vars = JSON.parse(localStorage.getItem('outreach.branding.vars') || 'null');
+        if (vars) {
+          for (var name in vars) {
+            document.documentElement.style.setProperty(name, vars[name]);
+          }
+        }
+      } catch (e) {
+        // Modo privado o dato corrupto: se sigue con los colores por defecto.
+      }
+    </script>
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>

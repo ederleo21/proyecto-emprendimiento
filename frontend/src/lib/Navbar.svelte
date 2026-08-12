@@ -28,11 +28,15 @@
 <header class="nav">
   <div class="nav-in">
     <div class="nav-brand">
-      <!-- La inicial hace de logo mientras no haya uno configurado. -->
-      <span class="nav-logo">{branding.data.name.charAt(0)}</span>
+      {#if branding.data.logo_url}
+        <img class="nav-logo-img" src={branding.data.logo_url} alt={branding.data.name} />
+      {:else}
+        <!-- La inicial hace de logo mientras no haya uno configurado. -->
+        <span class="nav-logo">{branding.data.name.charAt(0)}</span>
+      {/if}
       <div class="nav-titles">
         <strong>{branding.data.name}</strong>
-        <span>Vinculación con la Sociedad</span>
+        {#if branding.data.subtitle}<span>{branding.data.subtitle}</span>{/if}
       </div>
     </div>
 
@@ -44,8 +48,8 @@
 
       {#if menuOpen}
         <div class="nav-menu">
-          <button class="nav-menu-item" onclick={() => go('/settings/branding')}>
-            Identidad visual
+          <button class="nav-menu-item" onclick={() => go('/settings')}>
+            Configuración
           </button>
           <div class="nav-menu-sep"></div>
           <button class="nav-menu-item" onclick={() => auth.signOut()}>
@@ -74,6 +78,12 @@
     display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 17px;
   }
+  /* `contain` y no `cover`: un logo institucional no se recorta. */
+  .nav-logo-img {
+    height: 38px; width: auto; max-width: 160px;
+    object-fit: contain; display: block;
+  }
+
   .nav-titles { display: flex; flex-direction: column; line-height: 1.25; }
   .nav-titles strong { font-size: 14px; color: var(--ds-neutral-800, #1e293b); }
   .nav-titles span { font-size: 11px; color: var(--ds-neutral-500, #64748b); }
